@@ -9,7 +9,21 @@
     <title>Wayne Ops Hub</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main style="min-height:100vh;display:grid;place-items:center;background:#080B0F;color:#F5F7FA;font-family:Arial,sans-serif">
+        <div style="max-width:520px;padding:24px;border:1px solid #21262D;border-radius:8px;background:#0D1117">
+          <p style="margin:0 0 8px;color:#F0A500;font-weight:700;letter-spacing:.08em">WAYNE OPS HUB</p>
+          <h1 style="margin:0;font-size:28px">Loading operations...</h1>
+        </div>
+      </main>
+    </div>
+    <script>
+      window.addEventListener("error", function (event) {
+        var root = document.getElementById("root");
+        if (!root) return;
+        root.innerHTML = '<main style="min-height:100vh;display:grid;place-items:center;background:#080B0F;color:#F5F7FA;font-family:Arial,sans-serif"><div style="max-width:640px;padding:24px;border:1px solid #E5484D;border-radius:8px;background:#0D1117"><p style="margin:0 0 8px;color:#E5484D;font-weight:700">Runtime error</p><h1 style="margin:0 0 12px;font-size:26px">Wayne Ops Hub could not start.</h1><pre style="white-space:pre-wrap;color:#8B949E">' + String(event.message || "Unknown error") + '</pre></div></main>';
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

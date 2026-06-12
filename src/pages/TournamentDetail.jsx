@@ -1,4 +1,4 @@
-import { ExternalLink, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileSpreadsheet, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import Badge from "../components/Badge.jsx";
@@ -8,10 +8,11 @@ import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import { CAMPAIGN_TYPES, CONTACT_ROLES, FINANCE_CATEGORIES, OPERATION_CATEGORIES, OPERATION_STATUSES, TEAM_STATUSES, TOURNAMENT_STATUSES } from "../lib/constants.js";
 import { formatDate, money, titleize } from "../lib/format.js";
+import { getReadinessIssues, groupCounts, parseRegistrationsWorkbook, summarizeRegistrations } from "../lib/registrations.js";
 import { supabase } from "../lib/supabase.js";
 import { useAsync } from "../hooks/useAsync.js";
 
-const tabs = ["Overview", "Teams", "Contacts", "Campaigns", "Finances", "Operations", "Links"];
+const tabs = ["Overview", "Registrations", "Teams", "Contacts", "Campaigns", "Finances", "Operations", "Links"];
 
 async function loadTournament(id) {
   const { data, error } = await supabase
@@ -20,7 +21,19 @@ async function loadTournament(id) {
     .eq("id", id)
     .single();
   if (error) throw error;
-  return data;
+
+  const { data: registrations, error: registrationsError } = await supabase
+    .from("tournament_registrations")
+    .select("*")
+    .eq("tournament_id", id)
+    .order("division", { ascending: true })
+    .order("event_team_name", { ascending: true });
+
+  if (registrationsError) {
+    console.warn("Registrations table unavailable", registrationsError);
+  }
+
+  return { ...data, tournament_registrations: registrationsError ? [] : registrations ?? [] };
 }
 
 export default function TournamentDetail() {
@@ -43,6 +56,7 @@ export default function TournamentDetail() {
         {tabs.map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}
       </div>
       {activeTab === "Overview" && <OverviewTab tournament={tournament} refresh={refresh} />}
+      {activeTab === "Registrations" && <RegistrationsTab tournament={tournament} refresh={refresh} />}
       {activeTab === "Teams" && <TeamsTab tournament={tournament} refresh={refresh} />}
       {activeTab === "Contacts" && <ContactsTab tournament={tournament} refresh={refresh} />}
       {activeTab === "Campaigns" && <CampaignsTab tournament={tournament} refresh={refresh} />}
@@ -50,6 +64,156 @@ export default function TournamentDetail() {
       {activeTab === "Operations" && <OperationsTab tournament={tournament} refresh={refresh} />}
       {activeTab === "Links" && <LinksTab tournament={tournament} refresh={refresh} />}
     </div>
+  );
+}
+
+function RegistrationsTab({ tournament, refresh }) {
+  const rows = tournament.tournament_registrations ?? [];
+  const summary = summarizeRegistrations(rows);
+  const [importing, setImporting] = useState(false);
+  const [replaceExisting, setReplaceExisting] = useState(true);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const parsed = await parseRegistrationsWorkbook(file);
+      const payload = parsed.map((row) => ({ ...row, tournament_id: tournament.id }));
+
+      if (replaceExisting) {
+        const { error: deleteError } = await supabase.from("tournament_registrations").delete().eq("tournament_id", tournament.id);
+        if (deleteError) throw deleteError;
+      }
+
+      for (let index = 0; index < payload.length; index += 500) {
+        const chunk = payload.slice(index, index + 500);
+        const { error: upsertError } = await supabase
+          .from("tournament_registrations")
+          .upsert(chunk, { onConflict: "tournament_id,external_id" });
+        if (upsertError) throw upsertError;
+      }
+
+      setMessage(`Imported ${payload.length} registrations from ${file.name}.`);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Could not import registrations.");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-toolbar">
+        <div>
+          <h3>Registrations</h3>
+          <p className="panel-subtitle">Import GotSport exports and track bracket, payment, contact, and document readiness.</p>
+        </div>
+        <label className="upload-button">
+          <Upload size={16} />
+          <span>{importing ? "Importing..." : "Import Excel"}</span>
+          <input type="file" accept=".xlsx,.xls" disabled={importing} onChange={handleFile} />
+        </label>
+      </div>
+
+      <label className="check-row">
+        <input type="checkbox" checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} />
+        <span>Replace existing registrations for this tournament</span>
+      </label>
+
+      {message && <p className="success-text">{message}</p>}
+      {error && <p className="error-text">{error}</p>}
+
+      {rows.length === 0 ? (
+        <EmptyState title="No registrations imported" description="Upload Wayne's GotSport registration export to unlock intake, finance, bracket, and document readiness views." />
+      ) : (
+        <div className="page-stack">
+          <section className="stat-grid registration-stats">
+            <StatCard label="Teams" value={summary.total} />
+            <StatCard label="Paid" value={`${summary.paid}/${summary.total}`} tone="green" />
+            <StatCard label="Submitted" value={`${summary.submitted}/${summary.total}`} tone="blue" />
+            <StatCard label="Invoiced Total" value={money(summary.revenue)} tone="amber" />
+            <StatCard label="Missing Docs" value={summary.missingDocs} tone={summary.missingDocs ? "red" : "green"} />
+            <StatCard label="Missing Standings" value={summary.missingStandings} tone={summary.missingStandings ? "red" : "green"} />
+          </section>
+
+          <section className="ops-grid">
+            <BreakdownCard title="Divisions" rows={groupCounts(rows, "division", 8)} />
+            <BreakdownCard title="Event Age" rows={groupCounts(rows, "event_age", 8)} />
+            <BreakdownCard title="Preferred Level" rows={groupCounts(rows, "preferred_level", 8)} />
+            <BreakdownCard title="League Platform" rows={groupCounts(rows, "current_league_platform", 8)} />
+          </section>
+
+          <section className="panel-subsection">
+            <div className="section-title compact-title">
+              <AlertTriangle size={18} />
+              <h3>Readiness Watchlist</h3>
+            </div>
+            <DataTable headers={["Team", "Club", "Division", "Payment", "Issues", "Primary Contact"]} empty="Every imported team looks ready.">
+              {rows
+                .map((row) => ({ row, issues: getReadinessIssues(row) }))
+                .filter((item) => item.issues.length > 0)
+                .slice(0, 25)
+                .map(({ row, issues }) => (
+                  <tr key={row.id}>
+                    <td>{row.event_team_name || row.current_team_name}</td>
+                    <td>{row.club_name}</td>
+                    <td>{row.division}</td>
+                    <td><Badge value={row.payment_status || "unknown"} variant={String(row.payment_status).toLowerCase() === "paid" ? "confirmed" : "pending"} /></td>
+                    <td>{issues.join(", ")}</td>
+                    <td>{row.manager_email_1 || row.coach_email_1 || row.enrolled_by_email}</td>
+                  </tr>
+                ))}
+            </DataTable>
+          </section>
+
+          <section className="panel-subsection">
+            <div className="section-title compact-title">
+              <FileSpreadsheet size={18} />
+              <h3>Registration Detail</h3>
+            </div>
+            <DataTable headers={["Team", "Club", "Age", "Gender", "Division", "Level", "Total", "Contact"]} empty="No registration rows available.">
+              {rows.slice(0, 60).map((row) => (
+                <tr key={row.id}>
+                  <td>{row.event_team_name || row.current_team_name}</td>
+                  <td>{row.club_name}</td>
+                  <td>{row.event_age || row.team_age}</td>
+                  <td>{row.gender}</td>
+                  <td>{row.division}</td>
+                  <td>{row.preferred_division || row.preferred_level}</td>
+                  <td>{money(row.invoiced_total)}</td>
+                  <td>{row.manager_email_1 || row.coach_email_1 || row.enrolled_by_email}</td>
+                </tr>
+              ))}
+            </DataTable>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BreakdownCard({ title, rows }) {
+  return (
+    <article className="info-card breakdown-card">
+      <h3>{title}</h3>
+      <div className="breakdown-list">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

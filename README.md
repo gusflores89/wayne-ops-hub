@@ -54,4 +54,10 @@ npm run dev
 
 ## Database notes
 
-All seven tables have RLS enabled with the policy `authenticated users have full access`. All child records reference `tournaments(id)` with `ON DELETE CASCADE`.
+All tables have RLS enabled with the policy `authenticated users have full access`. All child records reference `tournaments(id)` with `ON DELETE CASCADE`.
+
+## Registration imports
+
+Open a tournament, go to the `Registrations` tab, and upload a GotSport-style `.xlsx` registration export. The importer maps team, club, division, age, gender, payment, coach, manager, document, standings, and fee columns into `tournament_registrations`.
+
+Run the latest `schema.sql` in Supabase before using this tab.

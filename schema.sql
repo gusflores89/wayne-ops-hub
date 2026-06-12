@@ -81,6 +81,74 @@ create table if not exists public.tournament_links (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.tournament_registrations (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments(id) on delete cascade,
+  external_id text,
+  current_team_name text,
+  club_name text,
+  event_team_name text,
+  short_name text,
+  created_at_source text,
+  complete boolean not null default false,
+  submitted boolean not null default false,
+  submitted_at text,
+  enrolled_by_name text,
+  enrolled_by_email text,
+  enrolled_by_phone text,
+  event_age text,
+  team_id text,
+  club_id text,
+  team_age text,
+  gender text,
+  state text,
+  division text,
+  bracket text,
+  flags text,
+  billing_name text,
+  fee_group text,
+  invoiced_reg_fee numeric not null default 0,
+  account_payment_method text,
+  payment_status text,
+  last_payment_check_id text,
+  last_payment_method text,
+  last_payment_date_received text,
+  features_invoiced_total numeric not null default 0,
+  invoiced_total numeric not null default 0,
+  transaction_ids text,
+  accounting_codes text,
+  preferred_division text,
+  optional_notes text,
+  coach_name_1 text,
+  coach_email_1 text,
+  coach_phone_1 text,
+  coach_name_2 text,
+  coach_email_2 text,
+  coach_phone_2 text,
+  manager_name_1 text,
+  manager_email_1 text,
+  manager_phone_1 text,
+  manager_name_2 text,
+  manager_email_2 text,
+  manager_phone_2 text,
+  arrival_date text,
+  departure_date text,
+  current_league_platform text,
+  standings_link text,
+  preferred_level text,
+  birth_year text,
+  payment_acknowledged boolean not null default false,
+  schedule_acknowledged boolean not null default false,
+  finals_acknowledged boolean not null default false,
+  guest_player_documents text,
+  player_passes text,
+  official_roster text,
+  raw_data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (tournament_id, external_id)
+);
+
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin
@@ -94,6 +162,11 @@ create trigger set_tournaments_updated_at
 before update on public.tournaments
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_tournament_registrations_updated_at on public.tournament_registrations;
+create trigger set_tournament_registrations_updated_at
+before update on public.tournament_registrations
+for each row execute function public.set_updated_at();
+
 alter table public.tournaments enable row level security;
 alter table public.tournament_teams enable row level security;
 alter table public.tournament_contacts enable row level security;
@@ -101,6 +174,7 @@ alter table public.tournament_campaigns enable row level security;
 alter table public.tournament_finances enable row level security;
 alter table public.tournament_operations enable row level security;
 alter table public.tournament_links enable row level security;
+alter table public.tournament_registrations enable row level security;
 
 drop policy if exists "authenticated users have full access" on public.tournaments;
 drop policy if exists "authenticated users have full access" on public.tournament_teams;
@@ -109,6 +183,7 @@ drop policy if exists "authenticated users have full access" on public.tournamen
 drop policy if exists "authenticated users have full access" on public.tournament_finances;
 drop policy if exists "authenticated users have full access" on public.tournament_operations;
 drop policy if exists "authenticated users have full access" on public.tournament_links;
+drop policy if exists "authenticated users have full access" on public.tournament_registrations;
 
 create policy "authenticated users have full access" on public.tournaments
 for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -129,4 +204,7 @@ create policy "authenticated users have full access" on public.tournament_operat
 for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 create policy "authenticated users have full access" on public.tournament_links
+for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+create policy "authenticated users have full access" on public.tournament_registrations
 for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');

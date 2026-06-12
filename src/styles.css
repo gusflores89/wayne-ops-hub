@@ -248,7 +248,8 @@ th {
 
 .primary-button,
 .ghost-button,
-.icon-button {
+.icon-button,
+.upload-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -270,6 +271,22 @@ th {
   background: var(--bg-elevated);
   color: var(--text);
   padding: 0 14px;
+}
+
+.upload-button {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(240, 165, 0, 0.55);
+  background: rgba(240, 165, 0, 0.1);
+  color: var(--accent);
+  padding: 0 14px;
+}
+
+.upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .icon-button {
@@ -303,6 +320,10 @@ th {
 
 .stat-grid.compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.registration-stats {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .stat-card,
@@ -478,6 +499,17 @@ th {
   padding: 18px;
 }
 
+.panel-subtitle {
+  max-width: 760px;
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+
+.panel-subsection {
+  display: grid;
+  gap: 12px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -487,6 +519,18 @@ th {
 .field {
   display: grid;
   gap: 7px;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  color: var(--muted);
+}
+
+.check-row input {
+  width: auto;
 }
 
 .field:has(textarea),
@@ -542,6 +586,46 @@ th {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.breakdown-card {
+  align-content: start;
+}
+
+.breakdown-list {
+  display: grid;
+  gap: 10px;
+}
+
+.breakdown-list div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  border-bottom: 1px solid var(--bg-border);
+  padding-bottom: 9px;
+}
+
+.breakdown-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.breakdown-list span {
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-title {
+  margin-bottom: 0;
 }
 
 .external-link {
@@ -609,6 +693,11 @@ th {
   margin: 0;
 }
 
+.success-text {
+  color: var(--green);
+  margin: 0;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -625,8 +714,10 @@ th {
 
   .stat-grid,
   .stat-grid.compact,
+  .registration-stats,
   .form-grid,
-  .link-grid {
+  .link-grid,
+  .ops-grid {
     grid-template-columns: 1fr;
   }
 

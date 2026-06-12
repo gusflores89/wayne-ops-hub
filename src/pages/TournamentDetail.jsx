@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, FileSpreadsheet, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileSpreadsheet, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import Badge from "../components/Badge.jsx";
@@ -13,6 +13,7 @@ import { supabase } from "../lib/supabase.js";
 import { useAsync } from "../hooks/useAsync.js";
 
 const tabs = ["Overview", "Registrations", "Teams", "Contacts", "Campaigns", "Finances", "Operations", "Links"];
+const generatedImportMarker = "Generated from registration import";
 
 async function loadTournament(id) {
   const { data, error } = await supabase
@@ -71,6 +72,7 @@ function RegistrationsTab({ tournament, refresh }) {
   const rows = tournament.tournament_registrations ?? [];
   const summary = summarizeRegistrations(rows);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -100,13 +102,30 @@ function RegistrationsTab({ tournament, refresh }) {
         if (upsertError) throw upsertError;
       }
 
-      setMessage(`Imported ${payload.length} registrations from ${file.name}.`);
+      const syncResult = await syncImportedRegistrationData(tournament.id, payload);
+      setMessage(`Imported ${payload.length} registrations from ${file.name}. Synced ${syncResult.teams} teams, ${syncResult.contacts} contacts, and ${syncResult.finances} finance summary.`);
       refresh();
     } catch (err) {
       setError(err.message || "Could not import registrations.");
     } finally {
       setImporting(false);
       event.target.value = "";
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const syncResult = await syncImportedRegistrationData(tournament.id, rows);
+      setMessage(`Synced ${syncResult.teams} teams, ${syncResult.contacts} contacts, and ${syncResult.finances} finance summary from registrations.`);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Could not sync registrations to ops tabs.");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -117,11 +136,19 @@ function RegistrationsTab({ tournament, refresh }) {
           <h3>Registrations</h3>
           <p className="panel-subtitle">Import GotSport exports and track bracket, payment, contact, and document readiness.</p>
         </div>
-        <label className="upload-button">
-          <Upload size={16} />
-          <span>{importing ? "Importing..." : "Import Excel"}</span>
-          <input type="file" accept=".xlsx,.xls" disabled={importing} onChange={handleFile} />
-        </label>
+        <div className="button-row">
+          {rows.length > 0 && (
+            <button className="ghost-button" onClick={handleSync} disabled={syncing || importing}>
+              <RefreshCw size={16} />
+              {syncing ? "Syncing..." : "Sync Ops Tabs"}
+            </button>
+          )}
+          <label className="upload-button">
+            <Upload size={16} />
+            <span>{importing ? "Importing..." : "Import Excel"}</span>
+            <input type="file" accept=".xlsx,.xls" disabled={importing} onChange={handleFile} />
+          </label>
+        </div>
       </div>
 
       <label className="check-row">
@@ -199,6 +226,116 @@ function RegistrationsTab({ tournament, refresh }) {
       )}
     </section>
   );
+}
+
+async function syncImportedRegistrationData(tournamentId, registrations) {
+  const rows = registrations ?? [];
+  const generatedLike = `%${generatedImportMarker}%`;
+
+  await deleteGeneratedRows("tournament_teams", tournamentId, generatedLike);
+  await deleteGeneratedRows("tournament_contacts", tournamentId, generatedLike);
+  await deleteGeneratedRows("tournament_finances", tournamentId, generatedLike);
+
+  const teams = rows
+    .filter((row) => row.club_name || row.event_team_name || row.current_team_name)
+    .map((row) => ({
+      tournament_id: tournamentId,
+      club_name: row.club_name || "Unknown Club",
+      contact_name: row.manager_name_1 || row.coach_name_1 || row.enrolled_by_name || null,
+      contact_email: row.manager_email_1 || row.coach_email_1 || row.enrolled_by_email || null,
+      age_group: row.event_age || row.team_age || row.birth_year || null,
+      status: String(row.payment_status || "").toLowerCase() === "paid" && row.submitted ? "confirmed" : "pending",
+      notes: [
+        generatedImportMarker,
+        row.external_id ? `Registration ID: ${row.external_id}` : null,
+        row.event_team_name ? `Team: ${row.event_team_name}` : null,
+        row.division ? `Division: ${row.division}` : null,
+        row.gender ? `Gender: ${row.gender}` : null,
+        row.preferred_level ? `Preferred level: ${row.preferred_level}` : null,
+      ].filter(Boolean).join(" | "),
+    }));
+
+  const contacts = [];
+  for (const row of rows) {
+    addRegistrationContact(contacts, tournamentId, row, "Enroller", row.enrolled_by_name, row.enrolled_by_email, row.enrolled_by_phone);
+    addRegistrationContact(contacts, tournamentId, row, "Coach 1", row.coach_name_1, row.coach_email_1, row.coach_phone_1);
+    addRegistrationContact(contacts, tournamentId, row, "Coach 2", row.coach_name_2, row.coach_email_2, row.coach_phone_2);
+    addRegistrationContact(contacts, tournamentId, row, "Manager 1", row.manager_name_1, row.manager_email_1, row.manager_phone_1);
+    addRegistrationContact(contacts, tournamentId, row, "Manager 2", row.manager_name_2, row.manager_email_2, row.manager_phone_2);
+  }
+
+  const uniqueContacts = dedupeContacts(contacts);
+  const financeRows = buildRegistrationFinanceRows(tournamentId, rows);
+
+  await insertInChunks("tournament_teams", teams);
+  await insertInChunks("tournament_contacts", uniqueContacts);
+  await insertInChunks("tournament_finances", financeRows);
+
+  return { teams: teams.length, contacts: uniqueContacts.length, finances: financeRows.length };
+}
+
+async function deleteGeneratedRows(table, tournamentId, generatedLike) {
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq("tournament_id", tournamentId)
+    .ilike("notes", generatedLike);
+  if (error) throw error;
+}
+
+async function insertInChunks(table, rows) {
+  for (let index = 0; index < rows.length; index += 500) {
+    const chunk = rows.slice(index, index + 500);
+    if (chunk.length === 0) continue;
+    const { error } = await supabase.from(table).insert(chunk);
+    if (error) throw error;
+  }
+}
+
+function addRegistrationContact(contacts, tournamentId, row, sourceRole, name, email, phone) {
+  if (!name && !email && !phone) return;
+  contacts.push({
+    tournament_id: tournamentId,
+    name: name || email || phone,
+    role: "staff",
+    email: email || null,
+    phone: phone || null,
+    notes: [
+      generatedImportMarker,
+      sourceRole,
+      row.event_team_name || row.current_team_name || null,
+      row.club_name || null,
+      row.external_id ? `Registration ID: ${row.external_id}` : null,
+    ].filter(Boolean).join(" | "),
+  });
+}
+
+function dedupeContacts(contacts) {
+  const seen = new Set();
+  return contacts.filter((contact) => {
+    const key = `${contact.email || ""}|${contact.phone || ""}|${contact.name || ""}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildRegistrationFinanceRows(tournamentId, rows) {
+  const invoicedTotal = rows.reduce((sum, row) => sum + Number(row.invoiced_total || 0), 0);
+  const regFees = rows.reduce((sum, row) => sum + Number(row.invoiced_reg_fee || 0), 0);
+  const featureFees = rows.reduce((sum, row) => sum + Number(row.features_invoiced_total || 0), 0);
+  const paidTeams = rows.filter((row) => String(row.payment_status || "").toLowerCase() === "paid").length;
+  const notes = `${generatedImportMarker} | ${rows.length} registrations | ${paidTeams} paid | Reg fees ${money(regFees)} | Feature fees ${money(featureFees)}`;
+
+  if (invoicedTotal <= 0) return [];
+  return [{
+    tournament_id: tournamentId,
+    description: "Registration import invoiced total",
+    category: "income",
+    amount: invoicedTotal,
+    date: new Date().toISOString().slice(0, 10),
+    notes,
+  }];
 }
 
 function BreakdownCard({ title, rows }) {

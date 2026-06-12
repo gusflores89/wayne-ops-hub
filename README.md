@@ -60,4 +60,11 @@ All tables have RLS enabled with the policy `authenticated users have full acces
 
 Open a tournament, go to the `Registrations` tab, and upload a GotSport-style `.xlsx` registration export. The importer maps team, club, division, age, gender, payment, coach, manager, document, standings, and fee columns into `tournament_registrations`.
 
+After import, use `Sync Ops Tabs` to generate operational records from the registration export:
+- `Teams`: one team row per imported registration.
+- `Contacts`: enroller, coach, and manager contacts.
+- `Finances`: a registration import income summary.
+
+Generated records are marked in `notes`, so re-syncing replaces generated records without deleting manually entered records.
+
 Run the latest `schema.sql` in Supabase before using this tab.

@@ -8,7 +8,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import { CAMPAIGN_TYPES, CONTACT_ROLES, FINANCE_CATEGORIES, OPERATION_CATEGORIES, OPERATION_STATUSES, TEAM_STATUSES, TOURNAMENT_STATUSES } from "../lib/constants.js";
 import { formatDate, money, titleize } from "../lib/format.js";
-import { getReadinessIssues, groupCounts, parseRegistrationsWorkbook, summarizeRegistrations } from "../lib/registrations.js";
+import { findReturningCoaches, getReadinessIssues, groupCounts, parseRegistrationsWorkbook, summarizeRegistrations, uniqueCoachEmailCount } from "../lib/registrations.js";
 import { supabase } from "../lib/supabase.js";
 import { useAsync } from "../hooks/useAsync.js";
 
@@ -34,7 +34,20 @@ async function loadTournament(id) {
     console.warn("Registrations table unavailable", registrationsError);
   }
 
-  return { ...data, tournament_registrations: registrationsError ? [] : registrations ?? [] };
+  const { data: comparisonRegistrations, error: comparisonError } = await supabase
+    .from("tournament_registrations")
+    .select("tournament_id,current_team_name,event_team_name,club_name,coach_email_1,coach_email_2,tournaments(name,start_date)")
+    .neq("tournament_id", id);
+
+  if (comparisonError) {
+    console.warn("Registration comparisons unavailable", comparisonError);
+  }
+
+  return {
+    ...data,
+    tournament_registrations: registrationsError ? [] : registrations ?? [],
+    comparison_registrations: comparisonError ? [] : comparisonRegistrations ?? [],
+  };
 }
 
 export default function TournamentDetail() {
@@ -71,6 +84,13 @@ export default function TournamentDetail() {
 function RegistrationsTab({ tournament, refresh }) {
   const rows = tournament.tournament_registrations ?? [];
   const summary = summarizeRegistrations(rows);
+  const returningCoaches = findReturningCoaches(rows, tournament.comparison_registrations ?? [], tournament.start_date);
+  const uniqueCoaches = uniqueCoachEmailCount(rows);
+  const returningCoachCount = new Set(returningCoaches.map((row) => row.email)).size;
+  const expenses = (tournament.tournament_finances ?? [])
+    .filter((row) => row.category === "expense")
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const projectedNet = summary.revenue - expenses;
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(true);
@@ -168,15 +188,45 @@ function RegistrationsTab({ tournament, refresh }) {
             <StatCard label="Paid" value={`${summary.paid}/${summary.total}`} tone="green" />
             <StatCard label="Submitted" value={`${summary.submitted}/${summary.total}`} tone="blue" />
             <StatCard label="Invoiced Total" value={money(summary.revenue)} tone="amber" />
+            <StatCard label="Recorded Expenses" value={money(expenses)} tone="red" />
+            <StatCard label="Projected Net" value={money(projectedNet)} tone={projectedNet >= 0 ? "green" : "red"} />
+            <StatCard label="Returning Coaches" value={`${returningCoachCount}/${uniqueCoaches}`} tone="blue" />
             <StatCard label="Missing Docs" value={summary.missingDocs} tone={summary.missingDocs ? "red" : "green"} />
             <StatCard label="Missing Standings" value={summary.missingStandings} tone={summary.missingStandings ? "red" : "green"} />
           </section>
 
           <section className="ops-grid">
+            <BreakdownCard title="States Represented" rows={groupCounts(rows, "state", 10)} />
             <BreakdownCard title="Divisions" rows={groupCounts(rows, "division", 8)} />
             <BreakdownCard title="Event Age" rows={groupCounts(rows, "event_age", 8)} />
             <BreakdownCard title="Preferred Level" rows={groupCounts(rows, "preferred_level", 8)} />
             <BreakdownCard title="League Platform" rows={groupCounts(rows, "current_league_platform", 8)} />
+          </section>
+
+          <section className="panel-subsection">
+            <div className="section-title compact-title">
+              <RefreshCw size={18} />
+              <h3>Returning Coaches</h3>
+            </div>
+            {returningCoaches.length === 0 ? (
+              <EmptyState
+                title="No cross-tournament returns yet"
+                description="Import registrations from another tournament or season. Matching coach emails will appear here automatically."
+              />
+            ) : (
+              <DataTable headers={["Coach Email", "Current Team", "Current Club", "Returned In", "Other Team", "Other Club"]} empty="No returning coaches found.">
+                {returningCoaches.slice(0, 50).map((row) => (
+                  <tr key={`${row.email}-${row.tournamentName}-${row.otherTeam}`}>
+                    <td>{row.email}</td>
+                    <td>{row.currentTeam}</td>
+                    <td>{row.currentClub}</td>
+                    <td>{row.tournamentName}{row.tournamentDate ? ` (${String(row.tournamentDate).slice(0, 4)})` : ""}</td>
+                    <td>{row.otherTeam}</td>
+                    <td>{row.otherClub}</td>
+                  </tr>
+                ))}
+              </DataTable>
+            )}
           </section>
 
           <section className="panel-subsection">

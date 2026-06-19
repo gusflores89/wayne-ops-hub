@@ -67,4 +67,6 @@ After import, use `Sync Ops Tabs` to generate operational records from the regis
 
 Generated records are marked in `notes`, so re-syncing replaces generated records without deleting manually entered records.
 
+The registration dashboard also shows represented states, recorded expenses, projected net, and returning coaches. Returning coaches are matched across later tournaments using normalized coach email addresses.
+
 Run the latest `schema.sql` in Supabase before using this tab.

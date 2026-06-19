@@ -118,6 +118,55 @@ export function groupCounts(rows, field, limit = 10) {
     .map(([label, value]) => ({ label, value }));
 }
 
+export function findReturningCoaches(currentRows, comparisonRows, currentTournamentDate = null) {
+  const otherByEmail = new Map();
+
+  for (const row of comparisonRows) {
+    for (const email of coachEmails(row)) {
+      const matches = otherByEmail.get(email) || [];
+      matches.push(row);
+      otherByEmail.set(email, matches);
+    }
+  }
+
+  const results = [];
+  const seen = new Set();
+
+  for (const row of currentRows) {
+    for (const email of coachEmails(row)) {
+      for (const other of otherByEmail.get(email) || []) {
+        if (currentTournamentDate && other.tournaments?.start_date && other.tournaments.start_date <= currentTournamentDate) {
+          continue;
+        }
+        const key = `${email}|${other.tournament_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        results.push({
+          email,
+          currentTeam: row.event_team_name || row.current_team_name || "Unknown team",
+          currentClub: row.club_name || "",
+          otherTeam: other.event_team_name || other.current_team_name || "Unknown team",
+          otherClub: other.club_name || "",
+          tournamentName: other.tournaments?.name || "Other tournament",
+          tournamentDate: other.tournaments?.start_date || null,
+        });
+      }
+    }
+  }
+
+  return results.sort((a, b) => String(b.tournamentDate || "").localeCompare(String(a.tournamentDate || "")));
+}
+
+export function uniqueCoachEmailCount(rows) {
+  return new Set(rows.flatMap(coachEmails)).size;
+}
+
+function coachEmails(row) {
+  return [row.coach_email_1, row.coach_email_2]
+    .map((email) => String(email || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function normalizeRegistration(raw) {
   const normalized = {};
   for (const [field, column] of Object.entries(columnMap)) {

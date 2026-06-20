@@ -60,6 +60,8 @@ All tables have RLS enabled with the policy `authenticated users have full acces
 
 Open a tournament, go to the `Registrations` tab, and upload a GotSport-style `.xlsx` registration export. The importer maps team, club, division, age, gender, payment, coach, manager, document, standings, and fee columns into `tournament_registrations`.
 
+Registrations can also be added manually with `Add Team`. Manual entries use the same analytics and automatically sync into Teams, Contacts, and Finances.
+
 After import, use `Sync Ops Tabs` to generate operational records from the registration export:
 - `Teams`: one team row per imported registration.
 - `Contacts`: enroller, coach, and manager contacts.

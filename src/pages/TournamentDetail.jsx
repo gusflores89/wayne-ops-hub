@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, FileSpreadsheet, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileSpreadsheet, Plus, RefreshCw, Save, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import Badge from "../components/Badge.jsx";
@@ -14,6 +14,21 @@ import { useAsync } from "../hooks/useAsync.js";
 
 const tabs = ["Overview", "Registrations", "Teams", "Contacts", "Campaigns", "Finances", "Operations", "Links"];
 const generatedImportMarker = "Generated from registration import";
+const initialManualRegistration = {
+  event_team_name: "",
+  club_name: "",
+  event_age: "",
+  gender: "",
+  state: "",
+  division: "",
+  preferred_level: "",
+  coach_name_1: "",
+  coach_email_1: "",
+  coach_phone_1: "",
+  payment_status: "PENDING",
+  invoiced_total: 0,
+  standings_link: "",
+};
 
 async function loadTournament(id) {
   const { data, error } = await supabase
@@ -93,6 +108,9 @@ function RegistrationsTab({ tournament, refresh }) {
   const projectedNet = summary.revenue - expenses;
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [addingManual, setAddingManual] = useState(false);
+  const [manualForm, setManualForm] = useState(initialManualRegistration);
+  const [savingManual, setSavingManual] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -149,6 +167,45 @@ function RegistrationsTab({ tournament, refresh }) {
     }
   }
 
+  function updateManual(field, value) {
+    setManualForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleManualSubmit(event) {
+    event.preventDefault();
+    setSavingManual(true);
+    setError("");
+    setMessage("");
+
+    const registration = {
+      ...manualForm,
+      tournament_id: tournament.id,
+      external_id: `manual-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      current_team_name: manualForm.event_team_name,
+      team_age: manualForm.event_age || null,
+      submitted: true,
+      complete: true,
+      invoiced_reg_fee: Number(manualForm.invoiced_total || 0),
+      invoiced_total: Number(manualForm.invoiced_total || 0),
+      raw_data: { source: "manual" },
+    };
+
+    try {
+      const { error: insertError } = await supabase.from("tournament_registrations").insert(registration);
+      if (insertError) throw insertError;
+
+      const syncResult = await syncImportedRegistrationData(tournament.id, [...rows, registration]);
+      setMessage(`Added ${registration.event_team_name}. Synced ${syncResult.teams} teams, ${syncResult.contacts} contacts, and finance summary.`);
+      setManualForm(initialManualRegistration);
+      setAddingManual(false);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Could not add the registration.");
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-toolbar">
@@ -157,6 +214,10 @@ function RegistrationsTab({ tournament, refresh }) {
           <p className="panel-subtitle">Import GotSport exports and track bracket, payment, contact, and document readiness.</p>
         </div>
         <div className="button-row">
+          <button className="ghost-button" onClick={() => setAddingManual((value) => !value)} disabled={importing || syncing}>
+            <UserPlus size={16} />
+            {addingManual ? "Cancel" : "Add Team"}
+          </button>
           {rows.length > 0 && (
             <button className="ghost-button" onClick={handleSync} disabled={syncing || importing}>
               <RefreshCw size={16} />
@@ -170,6 +231,39 @@ function RegistrationsTab({ tournament, refresh }) {
           </label>
         </div>
       </div>
+
+      {addingManual && (
+        <form className="form-grid inline-form" onSubmit={handleManualSubmit}>
+          <Field label="Team Name"><input value={manualForm.event_team_name} onChange={(event) => updateManual("event_team_name", event.target.value)} required /></Field>
+          <Field label="Club Name"><input value={manualForm.club_name} onChange={(event) => updateManual("club_name", event.target.value)} required /></Field>
+          <Field label="Event Age"><input value={manualForm.event_age} onChange={(event) => updateManual("event_age", event.target.value)} placeholder="e.g. U12" /></Field>
+          <Field label="Gender">
+            <select value={manualForm.gender} onChange={(event) => updateManual("gender", event.target.value)}>
+              <option value="">Unspecified</option>
+              <option value="m">Boys</option>
+              <option value="f">Girls</option>
+            </select>
+          </Field>
+          <Field label="State"><input value={manualForm.state} onChange={(event) => updateManual("state", event.target.value)} placeholder="e.g. TX" /></Field>
+          <Field label="Division"><input value={manualForm.division} onChange={(event) => updateManual("division", event.target.value)} /></Field>
+          <Field label="Preferred Level"><input value={manualForm.preferred_level} onChange={(event) => updateManual("preferred_level", event.target.value)} placeholder="e.g. Best of the Best" /></Field>
+          <Field label="Payment Status">
+            <select value={manualForm.payment_status} onChange={(event) => updateManual("payment_status", event.target.value)}>
+              <option value="PENDING">Pending</option>
+              <option value="PAID">Paid</option>
+              <option value="UNPAID">Unpaid</option>
+            </select>
+          </Field>
+          <Field label="Invoiced Total"><input type="number" min="0" step="0.01" value={manualForm.invoiced_total} onChange={(event) => updateManual("invoiced_total", event.target.value)} /></Field>
+          <Field label="Standings Link"><input type="url" value={manualForm.standings_link} onChange={(event) => updateManual("standings_link", event.target.value)} /></Field>
+          <Field label="Coach Name"><input value={manualForm.coach_name_1} onChange={(event) => updateManual("coach_name_1", event.target.value)} /></Field>
+          <Field label="Coach Email"><input type="email" value={manualForm.coach_email_1} onChange={(event) => updateManual("coach_email_1", event.target.value)} /></Field>
+          <Field label="Coach Phone"><input value={manualForm.coach_phone_1} onChange={(event) => updateManual("coach_phone_1", event.target.value)} /></Field>
+          <button className="primary-button full-span" type="submit" disabled={savingManual}>
+            {savingManual ? "Adding Team..." : "Add Registered Team"}
+          </button>
+        </form>
+      )}
 
       <label className="check-row">
         <input type="checkbox" checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} />

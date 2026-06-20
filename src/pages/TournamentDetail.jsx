@@ -415,8 +415,12 @@ function OverviewTab({ tournament, refresh }) {
 
   async function save() {
     setError("");
-    const payload = pick(form, ["name", "status", "start_date", "end_date", "city", "country", "venue", "total_slots", "notes"]);
+    const payload = pick(form, ["name", "series_name", "status", "start_date", "end_date", "city", "host_state", "country", "venue", "total_slots", "revenue_target", "expense_budget", "profit_target", "margin_target", "notes"]);
     payload.total_slots = Number(payload.total_slots || 0);
+    payload.revenue_target = Number(payload.revenue_target || 0);
+    payload.expense_budget = Number(payload.expense_budget || 0);
+    payload.profit_target = Number(payload.profit_target || 0);
+    payload.margin_target = Number(payload.margin_target || 0);
     const { error: updateError } = await supabase.from("tournaments").update(payload).eq("id", tournament.id);
     if (updateError) {
       setError(updateError.message);
@@ -441,13 +445,19 @@ function OverviewTab({ tournament, refresh }) {
       </div>
       <div className="form-grid">
         <Field label="Name"><input disabled={!editing} value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></Field>
+        <Field label="Series Name"><input disabled={!editing} value={form.series_name || ""} onChange={(event) => update("series_name", event.target.value)} placeholder="e.g. Surf Cup Texas" /></Field>
         <Field label="Status"><select disabled={!editing} value={form.status || "planning"} onChange={(event) => update("status", event.target.value)}>{TOURNAMENT_STATUSES.map(option)}</select></Field>
         <Field label="Start Date"><input disabled={!editing} type="date" value={form.start_date || ""} onChange={(event) => update("start_date", event.target.value)} /></Field>
         <Field label="End Date"><input disabled={!editing} type="date" value={form.end_date || ""} onChange={(event) => update("end_date", event.target.value)} /></Field>
         <Field label="City"><input disabled={!editing} value={form.city || ""} onChange={(event) => update("city", event.target.value)} /></Field>
+        <Field label="Host State"><input disabled={!editing} value={form.host_state || ""} onChange={(event) => update("host_state", event.target.value)} placeholder="e.g. TX" /></Field>
         <Field label="Country"><input disabled={!editing} value={form.country || ""} onChange={(event) => update("country", event.target.value)} /></Field>
         <Field label="Venue"><input disabled={!editing} value={form.venue || ""} onChange={(event) => update("venue", event.target.value)} /></Field>
-        <Field label="Total Slots"><input disabled={!editing} type="number" value={form.total_slots || 0} onChange={(event) => update("total_slots", event.target.value)} /></Field>
+        <Field label="Team Target"><input disabled={!editing} type="number" value={form.total_slots || 0} onChange={(event) => update("total_slots", event.target.value)} /></Field>
+        <Field label="Revenue Target"><input disabled={!editing} type="number" value={form.revenue_target || 0} onChange={(event) => update("revenue_target", event.target.value)} /></Field>
+        <Field label="Expense Budget"><input disabled={!editing} type="number" value={form.expense_budget || 0} onChange={(event) => update("expense_budget", event.target.value)} /></Field>
+        <Field label="Profit Target"><input disabled={!editing} type="number" value={form.profit_target || 0} onChange={(event) => update("profit_target", event.target.value)} /></Field>
+        <Field label="Margin Target %"><input disabled={!editing} type="number" min="0" max="100" step="0.1" value={form.margin_target || 0} onChange={(event) => update("margin_target", event.target.value)} /></Field>
         <Field label="Notes"><textarea disabled={!editing} value={form.notes || ""} onChange={(event) => update("notes", event.target.value)} /></Field>
       </div>
       {error && <p className="error-text">{error}</p>}

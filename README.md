@@ -69,4 +69,12 @@ Generated records are marked in `notes`, so re-syncing replaces generated record
 
 The registration dashboard also shows represented states, recorded expenses, projected net, and returning coaches. Returning coaches are matched across later tournaments using normalized coach email addresses.
 
+## Executive dashboard and reports
+
+The home page is an executive operating view with collected registration revenue, recorded expenses, operating profit, margin, targets, event status, and team count versus target.
+
+The `Reports` page groups tournament editions by `series_name` and compares registration pace, teams, gender, age groups, and in-state versus out-of-state participation. Configure each tournament's series name, host state, event date, team target, revenue target, expense budget, profit target, and margin target from the tournament Overview tab.
+
+Run the latest `schema.sql` to add these tournament planning fields to an existing Supabase project.
+
 Run the latest `schema.sql` in Supabase before using this tab.

@@ -15,6 +15,13 @@ create table if not exists public.tournaments (
   updated_at timestamptz not null default now()
 );
 
+alter table public.tournaments add column if not exists series_name text;
+alter table public.tournaments add column if not exists host_state text;
+alter table public.tournaments add column if not exists revenue_target numeric not null default 0;
+alter table public.tournaments add column if not exists expense_budget numeric not null default 0;
+alter table public.tournaments add column if not exists profit_target numeric not null default 0;
+alter table public.tournaments add column if not exists margin_target numeric not null default 0;
+
 create table if not exists public.tournament_teams (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references public.tournaments(id) on delete cascade,

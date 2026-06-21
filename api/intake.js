@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
-import { zodTextFormat } from "openai/helpers/zod";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
 const fallbackSupabaseUrl = "https://hljygplhebcafhynpnlr.supabase.co";
@@ -108,8 +108,8 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Your session is no longer valid." });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(503).json({ error: "OPENAI_API_KEY is not configured in Vercel." });
+  if (!process.env.OPENROUTER_API_KEY) {
+    return res.status(503).json({ error: "OPENROUTER_API_KEY is not configured in Vercel." });
   }
 
   const message = String(req.body?.message || "").trim();
@@ -122,7 +122,7 @@ export default async function handler(req, res) {
 
   const userContent = [
     {
-      type: "input_text",
+      type: "text",
       text: [
         `Selected tournament: ${tournament.name || "Not selected"}`,
         `Tournament dates: ${tournament.start_date || "unknown"} to ${tournament.end_date || "unknown"}`,
@@ -130,30 +130,40 @@ export default async function handler(req, res) {
       ].join("\n"),
     },
     ...images.map((image) => ({
-      type: "input_image",
-      image_url: image.dataUrl,
-      detail: "high",
+      type: "image_url",
+      image_url: {
+        url: image.dataUrl,
+        detail: "high",
+      },
     })),
   ];
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.responses.parse({
-      model: process.env.OPENAI_MODEL || "gpt-5.5",
-      input: [
+    const openai = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": process.env.APP_URL || "https://wayne-ops-hub-retain-players.vercel.app",
+        "X-Title": "Wayne Ops Hub",
+      },
+    });
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL || "google/gemini-3.1-flash-lite",
+      messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
-      text: {
-        format: zodTextFormat(intakeResultSchema, "wayne_ops_intake"),
-      },
+      response_format: zodResponseFormat(intakeResultSchema, "wayne_ops_intake"),
+      temperature: 0.1,
     });
 
-    if (!response.output_parsed) {
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
       return res.status(422).json({ error: "The assistant could not prepare a reviewable result." });
     }
 
-    return res.status(200).json(response.output_parsed);
+    const parsed = intakeResultSchema.parse(JSON.parse(content));
+    return res.status(200).json(parsed);
   } catch (error) {
     console.error("AI intake failed", error);
     return res.status(500).json({

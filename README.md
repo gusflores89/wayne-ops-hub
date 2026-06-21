@@ -10,6 +10,7 @@ Full-stack React + Supabase personal dashboard for Wayne Crowe's soccer tourname
 - react-router-dom v6
 - lucide-react icons
 - date-fns
+- OpenAI Responses API with Structured Outputs
 
 ## Supabase setup
 
@@ -50,6 +51,8 @@ npm run dev
 3. Add the same environment variables in Vercel Project Settings:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `OPENAI_API_KEY`
+   - `OPENAI_MODEL` (optional, defaults to `gpt-5.5`)
 4. Deploy.
 
 ## Database notes
@@ -80,3 +83,9 @@ The `Reports` page groups tournament editions by `series_name` and compares regi
 Run the latest `schema.sql` to add these tournament planning fields to an existing Supabase project.
 
 Run the latest `schema.sql` in Supabase before using this tab.
+
+## AI Intake
+
+`AI Intake` accepts a short message and up to two receipt or document images. The Vercel Function at `api/intake.js` sends them to OpenAI and returns structured proposed actions. The OpenAI API key is server-side and is never exposed through a `VITE_` variable.
+
+Every proposal is saved to `ai_intake_reviews`. A user must review and confirm it before the app writes to registrations, teams, contacts, finances, operations, or links. Run the latest `schema.sql`, or only `supabase/migrations/202606210001_ai_intake_reviews.sql`, before opening the feature.

@@ -10,6 +10,7 @@ import TournamentDetail from "./pages/TournamentDetail.jsx";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard.jsx";
 
 const Reports = lazy(() => import("./pages/Reports.jsx"));
+const AIIntake = lazy(() => import("./pages/AIIntake.jsx"));
 
 function ProtectedRoute({ session, children }) {
   if (session === undefined) {
@@ -48,6 +49,7 @@ export default function App() {
       <Route path="/" element={<ProtectedRoute session={session}><ExecutiveDashboard /></ProtectedRoute>} />
       <Route path="/operations" element={<ProtectedRoute session={session}><Overview /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute session={session}><Suspense fallback={<div className="screen-loader">Loading reports...</div>}><Reports /></Suspense></ProtectedRoute>} />
+      <Route path="/intake" element={<ProtectedRoute session={session}><Suspense fallback={<div className="screen-loader">Loading AI intake...</div>}><AIIntake /></Suspense></ProtectedRoute>} />
       <Route path="/tournaments" element={<ProtectedRoute session={session}><TournamentList /></ProtectedRoute>} />
       <Route path="/tournaments/new" element={<ProtectedRoute session={session}><TournamentCreate /></ProtectedRoute>} />
       <Route path="/tournaments/:id" element={<ProtectedRoute session={session}><TournamentDetail /></ProtectedRoute>} />

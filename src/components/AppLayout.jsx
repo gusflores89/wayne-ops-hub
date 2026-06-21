@@ -1,4 +1,4 @@
-import { BarChart3, LayoutDashboard, ListChecks, LogOut, Trophy } from "lucide-react";
+import { BarChart3, Bot, LayoutDashboard, ListChecks, LogOut, Trophy } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
 
@@ -34,6 +34,10 @@ export default function AppLayout({ children, session }) {
           <NavLink to="/tournaments" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
             <Trophy size={18} />
             <span>Tournaments</span>
+          </NavLink>
+          <NavLink to="/intake" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+            <Bot size={18} />
+            <span>AI Intake</span>
           </NavLink>
           <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
             <BarChart3 size={18} />

@@ -14,6 +14,7 @@ import { useAsync } from "../hooks/useAsync.js";
 
 const tabs = ["Overview", "Registrations", "Teams", "Contacts", "Campaigns", "Finances", "Operations", "Links"];
 const generatedImportMarker = "Generated from registration import";
+const REGISTRATION_PAYMENT_STATUSES = ["PENDING", "PAID", "PARTIAL", "UNPAID", "REFUNDED"];
 const initialManualRegistration = {
   event_team_name: "",
   club_name: "",
@@ -111,6 +112,7 @@ function RegistrationsTab({ tournament, refresh }) {
   const [addingManual, setAddingManual] = useState(false);
   const [manualForm, setManualForm] = useState(initialManualRegistration);
   const [savingManual, setSavingManual] = useState(false);
+  const [savingPaymentId, setSavingPaymentId] = useState("");
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -203,6 +205,35 @@ function RegistrationsTab({ tournament, refresh }) {
       setError(err.message || "Could not add the registration.");
     } finally {
       setSavingManual(false);
+    }
+  }
+
+  async function updateRegistrationPayment(row, paymentStatus) {
+    if (!row.id || paymentStatus === row.payment_status) return;
+
+    setSavingPaymentId(row.id);
+    setError("");
+    setMessage("");
+
+    try {
+      const payload = { payment_status: paymentStatus };
+      const { error: updateError } = await supabase
+        .from("tournament_registrations")
+        .update(payload)
+        .eq("id", row.id);
+      if (updateError) throw updateError;
+
+      const updatedRows = rows.map((registration) => (
+        registration.id === row.id ? { ...registration, ...payload } : registration
+      ));
+      const syncResult = await syncImportedRegistrationData(tournament.id, updatedRows);
+      const teamName = row.event_team_name || row.current_team_name || "Registration";
+      setMessage(`${teamName} payment updated to ${titleize(paymentStatus)}. Synced ${syncResult.teams} teams and finance summary.`);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Could not update payment status.");
+    } finally {
+      setSavingPaymentId("");
     }
   }
 
@@ -338,7 +369,13 @@ function RegistrationsTab({ tournament, refresh }) {
                     <td>{row.event_team_name || row.current_team_name}</td>
                     <td>{row.club_name}</td>
                     <td>{row.division}</td>
-                    <td><Badge value={row.payment_status || "unknown"} variant={String(row.payment_status).toLowerCase() === "paid" ? "confirmed" : "pending"} /></td>
+                    <td>
+                      <RegistrationPaymentSelect
+                        row={row}
+                        disabled={savingPaymentId === row.id}
+                        onChange={updateRegistrationPayment}
+                      />
+                    </td>
                     <td>{issues.join(", ")}</td>
                     <td>{row.manager_email_1 || row.coach_email_1 || row.enrolled_by_email}</td>
                   </tr>
@@ -351,7 +388,7 @@ function RegistrationsTab({ tournament, refresh }) {
               <FileSpreadsheet size={18} />
               <h3>Registration Detail</h3>
             </div>
-            <DataTable headers={["Team", "Club", "Age", "Gender", "Division", "Level", "Total", "Contact"]} empty="No registration rows available.">
+            <DataTable headers={["Team", "Club", "Age", "Gender", "Division", "Level", "Payment", "Total", "Contact"]} empty="No registration rows available.">
               {rows.slice(0, 60).map((row) => (
                 <tr key={row.id}>
                   <td>{row.event_team_name || row.current_team_name}</td>
@@ -360,6 +397,13 @@ function RegistrationsTab({ tournament, refresh }) {
                   <td>{row.gender}</td>
                   <td>{row.division}</td>
                   <td>{row.preferred_division || row.preferred_level}</td>
+                  <td>
+                    <RegistrationPaymentSelect
+                      row={row}
+                      disabled={savingPaymentId === row.id}
+                      onChange={updateRegistrationPayment}
+                    />
+                  </td>
                   <td>{money(row.invoiced_total)}</td>
                   <td>{row.manager_email_1 || row.coach_email_1 || row.enrolled_by_email}</td>
                 </tr>
@@ -735,6 +779,26 @@ function DataTable({ headers, empty, children }) {
   const hasRows = useMemo(() => Array.isArray(children) ? children.length > 0 : Boolean(children), [children]);
   if (!hasRows) return <EmptyState title={empty} description="Use the add button to create the first record." />;
   return <div className="table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;
+}
+
+function RegistrationPaymentSelect({ row, disabled, onChange }) {
+  const value = row.payment_status || "PENDING";
+  const variant = String(value).toLowerCase() === "paid" ? "confirmed" : "pending";
+
+  return (
+    <div className="payment-status-control">
+      <Badge value={value} variant={variant} />
+      <select
+        className="inline-select payment-select"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(row, event.target.value)}
+        aria-label={`Payment status for ${row.event_team_name || row.current_team_name || "registration"}`}
+      >
+        {REGISTRATION_PAYMENT_STATUSES.map(option)}
+      </select>
+    </div>
+  );
 }
 
 function InlineSelect({ table, row, field, options, refresh }) {

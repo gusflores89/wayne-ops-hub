@@ -584,6 +584,19 @@ th {
   min-width: 150px;
 }
 
+.payment-status-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 230px;
+}
+
+.payment-select {
+  min-width: 126px;
+  padding: 8px 28px 8px 10px;
+  font-size: 12px;
+}
+
 .link-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
